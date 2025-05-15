@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Dungeon Defense Knight V8.2 - Knight & Torches</title>
+  <style>
+    body { margin:0; background: #1a1a1f; overflow:hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display:block; touch-action:none; background:#1a1a1f; }
+
+    .ui-bottom-pair, .ui-bottom-hidden-pair {
+      position: fixed; display: flex; gap: 10px;
+      padding: 8px 10px;
+      background: rgba(30, 30, 35, 0.93); border: 2px solid #555; border-radius: 13px;
+      z-index: 100; transition: opacity .3s, transform .3s ease-out;
+      box-shadow: 0 2px 18px 0 #000a;
+    }
+    .ui-bottom-pair {
+      left:50%; bottom:20px;
+      transform:translate(-50%, 0);
+      opacity: 0; pointer-events: none;
+    }
+    .ui-bottom-pair.visible { opacity: 1; pointer-events: auto; }
+
+    .ui-bottom-hidden-pair {
+      flex-direction: column; left: 15px; bottom: 20px;
+      opacity: 0; transform: translateX(-30px) scale(0.9);
+      pointer-events: none; display: none;
+    }
+    .ui-bottom-hidden-pair.unlocked {
+      display: flex !important; opacity: 1;
+      transform: translateX(0) scale(1); pointer-events: auto;
+    }
+
+    .unit-button { width:48px; height:48px; border:2px solid #777; border-radius:7px; background:#33333a; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .08s, filter .22s; outline:none; box-shadow: 0 2px 8px #0005; margin:0; padding:0; filter: none; position: relative; overflow: hidden; }
+    .unit-shape-icon { width:36px; height:36px; pointer-events:none; display: block; margin: auto; }
+    .unit-button:active { transform:scale(.95);}
+    .unit-button .cooldown-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); transform-origin: bottom; transform: scaleY(1); pointer-events: none; transition: transform 0.1s linear; z-index: 1; }
+    .unit-button:not(.cooldown) .cooldown-overlay { transform: scaleY(0); }
+
+    .start-menu, .game-over, .shop-menu { position:fixed; top:0; left:0; width:100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(10, 10, 12, 0.85); z-index:200; color:#eee; text-align:center; backdrop-filter: blur(3px); }
+    .menu-content { background: #2a2a30; padding: 30px 40px; border-radius: 15px; border: 3px solid #666; box-shadow: 0 5px 25px #0008; position:relative; overflow:hidden; }
+    .start-menu h1, .game-over h1 { font-size:38px; margin-bottom:25px; color:#FFB74D; letter-spacing:1px; text-shadow: 1px 1px 3px #0005; animation: titlePulse 2.5s infinite ease-in-out; }
+    @keyframes titlePulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.03); opacity: 1; } }
+    .start-button, .restart-button, .shop-btn { background:#FFB74D; border:none; padding:12px 30px; font-size:22px; border-radius:8px; cursor:pointer; transition:transform .15s, background-color .18s; color:#332; font-weight:bold; box-shadow: 0 2px 10px #0005; margin-top: 10px; }
+    .start-button:hover, .restart-button:hover, .shop-btn:hover { background:#ffa726; } .start-button:active, .restart-button:active, .shop-btn:active { transform:scale(.96); }
+    .game-over { display:none; } .shop-menu { display:none; z-index: 400; background: rgba(10, 10, 12, 0.9); }
+
+    .arrow-indicator { position: fixed; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none; z-index: 150; opacity: 0; transition: opacity .4s; font-size: 0; }
+    .arrow-indicator.visible { opacity: 1; } .arrow { display: inline-block; width: 60px; height: 60px; margin: 0 100px; vertical-align: middle; animation: flasharrow 0.9s linear infinite; }
+    @keyframes flasharrow { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+    .arrow svg polygon { fill: #FFB74D; } .arrow svg { filter: drop-shadow(0 0 8px #FFB74D99); } .arrow-left { transform: rotate(180deg); }
+    .path-flash-arrows { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 120; display: none; }
+    .path-flash-arrows.visible { display: block; animation: pathArrowFlash 0.85s cubic-bezier(.7,0,.4,1); }
+    @keyframes pathArrowFlash { 0% { opacity: 0.0; } 15% { opacity: 0.5; } 75% { opacity: 0.4; } 100% { opacity: 0.0; } }
+
+    .shop-menu-inner { max-width: 90vw; min-width: 300px; width: 500px; box-sizing: border-box; background: #303038; border-radius: 15px; box-shadow: 0 6px 38px #ffb74d33; padding: 25px 30px; text-align: left; border: 4px solid #777; z-index: 405; position: relative; }
+    .shop-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #555; padding-bottom: 15px; }
+    .shop-title { font-size: 28px; font-weight: bold; color: #FFB74D; animation: none; }
+    .shop-currency { display: flex; align-items: center; font-size: 20px; color: #eee; }
+    .shop-coin { width: 20px; height: 20px; background: #FFD700; border-radius: 50%; margin-right: 8px; border: 2px solid #b8972b; box-shadow: inset 0 0 3px #0005; }
+    .shop-close { background: #555; color: #eee; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 20px; line-height: 28px; text-align: center; cursor: pointer; margin-left: 15px; font-weight: bold; transition: background .2s; }
+    .shop-close:hover { background: #777; }
+    .shop-item-grid { display: grid; gap: 15px; margin-bottom: 20px; }
+    .shop-item-container { display: flex; flex-direction: column; }
+    .shop-item { background: #3f3f46; padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #5a5a60; }
+    .shop-item-info { flex-grow: 1; margin-right: 15px; } .shop-item-title { font-weight: bold; color: #ddd; font-size: 17px; margin-bottom: 3px;}
+    .shop-item-desc { font-size: 14px; color: #bbb; max-width: 200px;} .shop-item-price { display: flex; align-items: center; font-size: 16px; margin-bottom: 5px; font-weight: bold; color: #FFD700; }
+    .shop-btn { font-size: 16px; padding: 8px 18px; min-width: 70px; } .shop-btn:disabled { background: #666; color: #aaa; cursor: not-allowed; }
+    .shop-status { margin-top: 8px; font-size: 14px; color: #FFB74D; min-height: 18px; text-align: right; padding-right: 5px; }
+    #continueBtn { width:100%; margin-top:14px; } .shop-decoration { position: absolute; bottom: 10px; right: 15px; width: 50px; height: 50px; opacity: 0.6; pointer-events: none; }
+    .shop-decoration::before { content: ''; display: block; width: 100%; height: 100%; border: 5px solid #666; border-radius: 5px; transform: rotate(45deg); background: #444; }
+    @media (max-width: 550px){ .shop-menu-inner { max-width: 95vw; width: auto; padding: 20px 15px; } .shop-item { flex-direction: column; align-items: flex-start; } .shop-item > div:last-child { align-self: flex-end; margin-top: 10px; } .shop-item-desc { max-width: none; } .shop-header { flex-direction: column; align-items: flex-start; } .shop-currency { margin-top: 10px; } .shop-close { position: absolute; top: 10px; right: 10px; } .shop-decoration { display: none; } }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="start-menu" id="startMenu"> <div class="menu-content" id="startMenuContent"> <h1>Dungeon Defense</h1> <button class="start-button">Start Game</button> </div> </div>
+  <div class="arrow-indicator" id="arrowIndicator"> <span class="arrow arrow-left"><svg viewBox="0 0 64 64"><polygon points="52,6 12,32 52,58"/></svg></span> <span class="arrow arrow-right"><svg viewBox="0 0 64 64"><polygon points="12,6 52,32 12,58"/></svg></span> </div>
+  <div class="path-flash-arrows" id="pathFlashArrows"></div>
+
+  <div class="ui-bottom-pair" id="gameControlsPair"> <button class="unit-button" data-unit="1" data-lane="1"> <canvas class="unit-shape-icon"></canvas> <div class="cooldown-overlay"></div> </button> <button class="unit-button" data-unit="3" data-lane="1"> <canvas class="unit-shape-icon"></canvas> <div class="cooldown-overlay"></div> </button> </div>
+  <div class="ui-bottom-hidden-pair" id="gameControlsHiddenPair"> <button class="unit-button" data-unit="2" data-lane="2"> <canvas class="unit-shape-icon"></canvas> <div class="cooldown-overlay"></div> </button> <button class="unit-button" data-unit="4" data-lane="2"> <canvas class="unit-shape-icon"></canvas> <div class="cooldown-overlay"></div> </button> </div>
+
+  <div class="game-over" id="gameOverMenu"> <div class="menu-content"> <h1>Game Over!</h1> <button class="restart-button">Restart</button> </div> </div>
+  <div class="shop-menu" id="shopMenu"> <div class="shop-menu-inner"> <div class="shop-header"> <div class="shop-title">Treasury</div> <div class="shop-currency"> <div class="shop-coin"></div> <span id="player-currency" style="font-weight:bold; margin-left: 5px;">0</span> <button class="shop-close" id="shopCloseBtn">×</button> </div> </div>
+    <div class="shop-item-grid">
+      <div class="shop-item-container">
+        <div class="shop-item" id="shop-item-unlock">
+          <div class="shop-item-info"> <div class="shop-item-title">Unlock Arcane Lane</div> <div class="shop-item-desc">Unlocks 2 additional glyphs (Poison & Holy) for the left lane.</div> </div>
+          <div> <div class="shop-item-price"> <div class="shop-coin" style="width:15px;height:15px;margin-right:5px;"></div> <span id="unlock-price">5</span> </div> <button class="shop-btn" id="buyUnlockBtn">Buy</button> </div>
+        </div>
+        <div id="buyUnlockStatus" class="shop-status"></div>
+      </div>
+      <div class="shop-item-container">
+        <div class="shop-item" id="shop-item-health">
+            <div class="shop-item-info">
+                <div class="shop-item-title">Reinforce Armor</div>
+                <div class="shop-item-desc">Permanently increases max health by 1 and fully heals. (Max: <span id="max-hp-cap-display">5</span> HP)</div>
+            </div>
+            <div>
+                <div class="shop-item-price">
+                    <div class="shop-coin" style="width:15px;height:15px;margin-right:5px;"></div>
+                    <span id="health-upgrade-price">10</span>
+                </div>
+                <button class="shop-btn" id="buyHealthUpgradeBtn">Buy</button>
+            </div>
+        </div>
+        <div id="buyHealthUpgradeStatus" class="shop-status"></div>
+      </div>
+    </div>
+    <button class="shop-btn" id="continueBtn">Continue Dungeon</button>
+    <div class="shop-decoration"></div>
+  </div> </div>
+
+  <script>
+    window.onerror = function(message, source, lineno, colno, error) {
+        try {
+            const errorDisplay = document.createElement('div');
+            errorDisplay.style.position = 'fixed'; errorDisplay.style.top = '0'; errorDisplay.style.left = '0'; errorDisplay.style.width = '100%';
+            errorDisplay.style.padding = '10px'; errorDisplay.style.background = 'rgba(200, 0, 0, 0.9)'; errorDisplay.style.color = 'white';
+            errorDisplay.style.zIndex = '99999'; errorDisplay.style.fontFamily = 'monospace'; errorDisplay.style.fontSize = '12px';
+            errorDisplay.style.borderBottom = '2px solid darkred'; errorDisplay.style.whiteSpace = 'pre-wrap';
+            errorDisplay.textContent = `JS ERROR: ${message}\nFile: ${source ? source.split('/').pop() : 'unknown'}\nLine: ${lineno}, Column: ${colno}\n${error && error.stack ? error.stack : '(no stack)'}`;
+            if (document.body) { document.body.appendChild(errorDisplay); } else { alert(`Critical JS ERROR: ${message} at ${source ? source.split('/').pop() : 'unknown'}:${lineno}`);}
+        } catch (e) { alert(`VERY CRITICAL JS ERROR: ${message}\nOriginal error display failed: ${e.message}`); }
+        return true; 
+    };
+
+    const SETTINGS = { DEBUG_MODE: false };
+    const COLORS = { RED: "#F44336", GREEN: "#4CAF50", BLUE: "#2196F3", YELLOW: "#FFEB3B", GOLD: "#FFB74D", WHITE: "#FFFFFF", BLACK: "#000000", ENEMY_STROKE: "#111", UNIT_STROKE: "#EEE", PATH_COLOR_NEAR: "#795548", PATH_COLOR_FAR: "#A1887F", PATH_BORDER: "#5D4037", PATH_LINE: "#BDAAA4AA", WALL_COLOR_NEAR: "#4E342E", WALL_COLOR_FAR: "#6D4C41", HP_FILLED: ["#FFCDD2", "#E57373", "#EF5350"], HP_EMPTY: ["#BDBDBD", "#757575", "#424242"], 
+                     SPIKE_COLOR: "#C62828", SPIKE_TIP_COLOR: "#FF7043", SPIKE_OUTLINE_PULSE: "#FFB74D" };
+    const SHAPES = { FIRE_RUNE: 'fire_rune', POISON_CLOUD: 'poison_cloud', ICE_SPIKE: 'ice_spike', HOLY_STAR: 'holy_star', UNKNOWN: 'unknown', HEART_PARTICLE: 'heart_particle' };
+    const GAME_CONFIG = { HERO_SIZE: 80, UNIT_SIZE: 40, ENEMY_BASE_SIZE: 20, BASE_STARTING_HP: 1, MAX_HERO_HP_POSSIBLE: 5, HEALTH_UPGRADE_COST: 10, LANE_UNIT_COOLDOWN: 600, PARTICLE_COUNT: 12, UNLOCK_COST: 5, INITIAL_STAGE_TARGET: 8, STAGE_TARGET_INCREMENT: 5, STAGE_TARGET_MULTIPLIER: 1.3, HERO_LERP_FACTOR: 0.2, MAX_TORCHES: 6, TORCH_SCROLL_SPEED: 1.2, 
+                        SPIKE_BASE_SIZE: 35, SPIKE_BASE_SPEED: 2.5, SPIKE_SPAWN_INTERVAL: 4500, SPIKE_DAMAGE: 1, START_MENU_PARTICLE_COUNT: 25 };
+    const DIFFICULTY_BASE = { SPAWN_INTERVAL_LANE1: 3000, SPAWN_INTERVAL_LANE2: 3900, ENEMY_BASE_SPEED: 1.0, SPEED_INCREASE_PER_SCORE: 0.05, SPAWN_DECREASE_PER_SCORE: 10, ENEMY_CURVE_INTENSITY: 0.12 };
+
+    let canvas, ctx, startMenu, startMenuContent, gameOverMenu, shopMenu, shopCloseBtn, playerCurrencyDisplay, buyUnlockBtn, buyUnlockStatus, unlockPriceDisplay, continueBtn, startButton, restartButton, gameControlsPair, gameControlsHiddenPair, arrowIndicator, pathFlashArrows, unitButtons, buyHealthUpgradeBtn, healthUpgradePriceDisplay, buyHealthUpgradeStatus, maxHpCapDisplay;
+
+    let state = null; let pathAnimOffset = 0; let heroHitFeedback = 0; let explodingHeartIndex = -1; let explodingHeartAnim = 0; let currentStage = 1; let scoreNeededForNextStage = GAME_CONFIG.INITIAL_STAGE_TARGET; let isShopMenuActive = false; let isArcaneLaneUnlocked = false; const laneCooldowns = { 1: 0, 2: 0 }; const path = { startWidth: 0, endWidth: 60, updateDimensions() { if(canvas) this.startWidth = canvas.width * 0.65; } };
+    let purchasedHpUpgrades = 0;
+    let startMenuParticles = [];
+    let nextTorchSide = 'left'; 
+
+    const log = (...args) => SETTINGS.DEBUG_MODE && console.log(...args);
+    const getTimestamp = () => performance.now();
+    const random = (min, max) => Math.random() * (max - min) + min;
+    const randomInt = (min, max) => Math.floor(random(min, max + 1));
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const UNIT_DATA = { '1': { color: COLORS.RED, shape: SHAPES.FIRE_RUNE }, '2': { color: COLORS.GREEN, shape: SHAPES.POISON_CLOUD }, '3': { color: COLORS.BLUE, shape: SHAPES.ICE_SPIKE }, '4': { color: COLORS.YELLOW, shape: SHAPES.HOLY_STAR } };
+    const ENEMY_TYPES_LANE1 = [UNIT_DATA['1'], UNIT_DATA['3']]; const ENEMY_TYPES_LANE2 = [UNIT_DATA['2'], UNIT_DATA['4']];
+
+    function getPathEdgesAtY(y) {
+        if (!canvas || !path.startWidth) return { left: (canvas ? canvas.width / 2 : 0), right: (canvas ? canvas.width / 2 : 0) };
+        const h = canvas.height;
+        const normalizedY = clamp(y / h, 0, 1);
+        const currentPathWidth = path.startWidth - (path.startWidth - path.endWidth) * (1 - normalizedY);
+        const pathCenterX = canvas.width / 2;
+        const halfCurrentPathWidth = currentPathWidth / 2;
+        return { left: pathCenterX - halfCurrentPathWidth, right: pathCenterX + halfCurrentPathWidth };
+    }
+
+    function drawThematicShape(ctx, shape, size) { ctx.lineWidth = Math.max(1.5, size * 0.08); ctx.strokeStyle = COLORS.BLACK + '99'; const s2 = size / 2; const s4 = size / 4; if (shape === SHAPES.FIRE_RUNE) { ctx.beginPath(); ctx.arc(0, 0, s2 * 0.85, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.save(); ctx.strokeStyle = COLORS.WHITE + '99'; ctx.lineWidth *= 0.6; ctx.beginPath(); ctx.arc(0, 0, s2 * 0.6, Math.PI * 0.2, Math.PI * 1.3); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, s2 * 0.3, Math.PI * 1.2, Math.PI * 0.3); ctx.stroke(); ctx.restore(); } else if (shape === SHAPES.POISON_CLOUD) { ctx.beginPath(); ctx.moveTo(s2*0.7, s2*0.7); ctx.bezierCurveTo(s2, s2*0.3, s2*0.6, -s2*0.4, 0, -s2*0.7); ctx.bezierCurveTo(-s2*0.6, -s2*0.4, -s2, s2*0.3, -s2*0.7, s2*0.7); ctx.bezierCurveTo(-s2*0.4, s2*1.1, s2*0.4, s2*1.1, s2*0.7, s2*0.7); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = COLORS.WHITE + '55'; ctx.beginPath(); ctx.arc(-s4, -s4*0.5, s4*0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(s4*0.8, -s4*0.8, s4*0.3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(s4*0.2, s4*0.9, s4*0.6, 0, Math.PI*2); ctx.fill(); } else if (shape === SHAPES.ICE_SPIKE) { ctx.beginPath(); ctx.moveTo(0, -s2); ctx.lineTo(s2*0.8, s2*0.6); ctx.lineTo(s2*0.3, s2*0.5); ctx.lineTo(0, s2*0.9); ctx.lineTo(-s2*0.3, s2*0.5); ctx.lineTo(-s2*0.8, s2*0.6); ctx.closePath(); ctx.fill(); ctx.stroke(); } else if (shape === SHAPES.HOLY_STAR) { drawStar(ctx, 0, 0, 5, s2 * 0.9, s4 * 0.9); ctx.fill(); ctx.stroke(); ctx.save(); ctx.fillStyle = COLORS.WHITE + 'cc'; ctx.beginPath(); ctx.arc(0,0, s4*0.5, 0, Math.PI*2); ctx.fill(); ctx.restore(); } else if (shape === SHAPES.HEART_PARTICLE) { ctx.beginPath(); ctx.moveTo(0, -s2 * 0.3); ctx.bezierCurveTo(-s2 * 0.7, -s2 * 0.8, -s2 * 0.4, -s2 * 1.2, 0, -s2 * 0.7); ctx.bezierCurveTo(s2 * 0.4, -s2 * 1.2, s2 * 0.7, -s2 * 0.8, 0, -s2 * 0.3); ctx.closePath(); ctx.fill(); if(ctx.strokeStyle && ctx.strokeStyle !== 'none') ctx.stroke(); } else { ctx.fillRect(-s2 * 0.8, -s2 * 0.8, s2 * 1.6, s2 * 1.6); ctx.strokeRect(-s2 * 0.8, -s2 * 0.8, s2 * 1.6, s2 * 1.6); } }
+    function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) { let rot = Math.PI / 2 * 3; ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius); for(let i = 0; i < spikes; i++) { let x = cx + Math.cos(rot) * outerRadius; let y = cy + Math.sin(rot) * outerRadius; ctx.lineTo(x, y); rot += Math.PI / spikes; x = cx + Math.cos(rot) * innerRadius; y = cy + Math.sin(rot) * innerRadius; ctx.lineTo(x, y); rot += Math.PI / spikes; } ctx.lineTo(cx, cy - outerRadius); ctx.closePath(); }
+    function drawUnitShapeIcon(canvasEl, shape, color) { const c = canvasEl.getContext("2d"); const s = canvasEl.width; c.clearRect(0, 0, s, s); c.save(); c.translate(s / 2, s / 2); c.fillStyle = color; drawThematicShape(c, shape, s * 0.85); c.restore(); }
+    function setupUnitButtons() { unitButtons.forEach(btn => { const uid = btn.dataset.unit; const cnvs = btn.querySelector('.unit-shape-icon'); if (uid && UNIT_DATA[uid] && cnvs) { const { color, shape } = UNIT_DATA[uid]; cnvs.width = cnvs.height = 36; drawUnitShapeIcon(cnvs, shape, color); } if (!btn.querySelector('.cooldown-overlay')) { const ov = document.createElement('div'); ov.className = 'cooldown-overlay'; btn.appendChild(ov); } }); }
+    function getStageDifficulty(stage) { const sf = Math.max(0, stage - 1); return { SPAWN_INTERVAL_LANE1: Math.max(700, DIFFICULTY_BASE.SPAWN_INTERVAL_LANE1 - sf * 280), SPAWN_INTERVAL_LANE2: Math.max(800, DIFFICULTY_BASE.SPAWN_INTERVAL_LANE2 - sf * 270), ENEMY_BASE_SPEED: DIFFICULTY_BASE.ENEMY_BASE_SPEED + sf * 0.20, SPEED_INCREASE_PER_SCORE: DIFFICULTY_BASE.SPEED_INCREASE_PER_SCORE + sf * 0.012, SPAWN_DECREASE_PER_SCORE: Math.max(2, DIFFICULTY_BASE.SPAWN_DECREASE_PER_SCORE + sf * 2.5), ENEMY_CURVE_INTENSITY: DIFFICULTY_BASE.ENEMY_CURVE_INTENSITY + sf * 0.07, SPIKE_SPAWN_INTERVAL: Math.max(1500, GAME_CONFIG.SPIKE_SPAWN_INTERVAL - sf * 300), SPIKE_SPEED: GAME_CONFIG.SPIKE_BASE_SPEED + sf * 0.25 }; }
+    function applyStageDifficulty() { const d = getStageDifficulty(currentStage); state.spawnIntervalLane1 = d.SPAWN_INTERVAL_LANE1; state.spawnIntervalLane2 = d.SPAWN_INTERVAL_LANE2; state.enemyBaseSpeed = d.ENEMY_BASE_SPEED; state.speedIncreasePerScore = d.SPEED_INCREASE_PER_SCORE; state.spawnDecreasePerScore = d.SPAWN_DECREASE_PER_SCORE; state.enemyCurveIntensity = d.ENEMY_CURVE_INTENSITY; state.spikeSpawnInterval = d.SPIKE_SPAWN_INTERVAL; state.spikeSpeed = d.SPIKE_SPEED;}
+    function createGameState() { const currentMaxHp = GAME_CONFIG.BASE_STARTING_HP + purchasedHpUpgrades; return { hero: { x: canvas.width / 2, y: canvas.height - 150, size: GAME_CONFIG.HERO_SIZE, color: COLORS.GOLD, hp: currentMaxHp, maxHp: currentMaxHp, targetX: canvas.width / 2 }, units: [], enemies: [], particles: [], spikes: [], torches: [], lastSpawnTimeLane1: 0, lastSpawnTimeLane2: 0, spawnIntervalLane1: 0, spawnIntervalLane2: 0, enemyBaseSpeed: 0, speedIncreasePerScore: 0, spawnDecreasePerScore: 0, enemyCurveIntensity: 0, score: 0, coins: 0, playing: false, gameStarted: false, lastSpikeSpawnTime: 0, spikeSpawnInterval: GAME_CONFIG.SPIKE_SPAWN_INTERVAL, spikeSpeed: GAME_CONFIG.SPIKE_BASE_SPEED }; }
+    function initializeTorches() { if(!state || !canvas) return; state.torches = []; for (let i=0; i < GAME_CONFIG.MAX_TORCHES; i++) { spawnTorch(true, i * (canvas.height / GAME_CONFIG.MAX_TORCHES) ); } }
+    function spawnTorch(initial = false, initialY) { if(!state || !canvas) return; const y = initial ? initialY : -random(50, 150); const pathEdges = getPathEdgesAtY(y); const offsetFromPathEdge = random(10, 30) + (path.startWidth - path.endWidth) * 0.05; let xSide; if (initial) { xSide = (state.torches.length % 2 === 0) ? pathEdges.left - offsetFromPathEdge : pathEdges.right + offsetFromPathEdge; } else { xSide = (nextTorchSide === 'left') ? pathEdges.left - offsetFromPathEdge : pathEdges.right + offsetFromPathEdge; nextTorchSide = (nextTorchSide === 'left') ? 'right' : 'left'; } state.torches.push({ x: xSide, y: y, size: random(15, 25), seed: random(0,1000), intendedSide: xSide < canvas.width / 2 ? 'left' : 'right'}); }
+    function resetGame() { if (state && state.animationFrameId) { cancelAnimationFrame(state.animationFrameId); state.animationFrameId = null; } resizeCanvas(); state = createGameState(); currentStage = 1; scoreNeededForNextStage = GAME_CONFIG.INITIAL_STAGE_TARGET; isArcaneLaneUnlocked = false; isShopMenuActive = false; laneCooldowns[1] = 0; laneCooldowns[2] = 0; pathAnimOffset = 0; heroHitFeedback = 0; explodingHeartIndex = -1; explodingHeartAnim = 0; applyStageDifficulty(); initializeTorches(); gameOverMenu.style.display = 'none'; startMenu.style.display = 'flex'; shopMenu.style.display = 'none'; gameControlsPair.classList.remove('visible'); gameControlsHiddenPair.classList.remove('unlocked'); gameControlsHiddenPair.style.display = 'none'; updateHiddenPairVisibility(); if (!startMenuParticles.length) createStartMenuParticles(); if (!state.animationFrameId) gameLoop(); }
+    function startGame() { if (!state || state.playing) return; state.playing = true; state.gameStarted = true; state.hero.hp = state.hero.maxHp; startMenu.style.display = 'none'; gameControlsPair.classList.add('visible'); updateHiddenPairVisibility(); showStartArrows(); const now = getTimestamp(); state.lastSpawnTimeLane1 = now; state.lastSpawnTimeLane2 = now; state.lastSpikeSpawnTime = now + (state.spikeSpawnInterval || GAME_CONFIG.SPIKE_SPAWN_INTERVAL) / 2; }
+    function gameOver() { if (!state || !state.playing) return; state.playing = false; gameOverMenu.style.display = 'flex'; }
+    function isEnemyVisible(e) { return e.lane === 1 || isArcaneLaneUnlocked; }
+    function isUnitVisible(u) { return u.lane === 1 || isArcaneLaneUnlocked; }
+    function getHeroTargetPoints(hero) { const hx = hero.x; const hy = hero.y; const hs = hero.size; return { head:      { x: hx,               y: hy - hs * 0.30, lane: 1 }, leftBody:  { x: hx - hs * 0.25,   y: hy + hs * 0.05, lane: 2 }, rightBody: { x: hx + hs * 0.25,   y: hy + hs * 0.05, lane: 1, alt: true } }; }
+    function getHeroBoundingBox(hero) { const hx = hero.x; const hy = hero.y; const hs = hero.size; return { left:   hx - hs * 0.35, right:  hx + hs * 0.35, top:    hy - hs * 0.38, bottom: hy + hs * 0.38 }; }
+    function getUnitInLane(lane) { return state.units.find(u => u.lane === lane); }
+    function getEnemyTargetPoint(enemy) { const targets = getHeroTargetPoints(state.hero); let targetPoint; if (enemy.lane === 1) { targetPoint = targets.head; } else if (enemy.lane === 2 && isArcaneLaneUnlocked) { targetPoint = targets.leftBody; } else { targetPoint = targets.head; } const unit = getUnitInLane(enemy.lane); if (unit && isUnitVisible(unit)) { return { x: unit.x, y: unit.y }; } let targetX = targetPoint.x; if (enemy.lane === 1 && typeof enemy.laneOffset === "number") { targetX += enemy.laneOffset; } return { x: targetX, y: targetPoint.y }; }
+    class EnemyBehavior { static calculateDirection(e, target) { const dx = target.x - e.x; const dy = target.y - e.y; const len = Math.sqrt(dx * dx + dy * dy); return len > 0 ? { x: dx / len, y: dy / len } : { x: 0, y: 0 }; } static updateMovement(enemy) { const target = getEnemyTargetPoint(enemy); const dir = this.calculateDirection(enemy, target); const spd = enemy.speed; const sf = Math.min(currentStage, 7); if (enemy.lane === 2 && enemy.spawnLeftOfHero) { const arcStr = 60 + 25 * Math.sin(getTimestamp() / 700 + enemy.spawnCurveSeed) + (sf * 10); const arc = Math.sin(enemy.y / (110 - sf * 7) + enemy.spawnCurveSeed) * arcStr; enemy.x += dir.x * spd * 1.05 + arc * 0.015 * (1 + sf * 0.1); enemy.y += dir.y * spd * 1.1; enemy.x += Math.sin(getTimestamp() / 150 + enemy.spawnCurveSeed) * 0.3 * sf; } else { const curve = Math.sin(enemy.y / (120 - sf * 8)) * state.enemyCurveIntensity * (1 + sf * 0.15); enemy.x += dir.x * spd + curve; enemy.y += dir.y * spd; } if (currentStage > 3) { enemy.x += Math.sin(getTimestamp() / 120 + enemy.spawnCurveSeed + enemy.y / 80) * 1.8 * (sf/4); } enemy.angle = Math.sin(getTimestamp() * 0.0015 + enemy.oscillationOffset) * 0.08; } }
+    function spawnEnemy(lane) { const now = getTimestamp(); let canSpawn = false; let typePool = []; if (lane === 1) { canSpawn = now - state.lastSpawnTimeLane1 > state.spawnIntervalLane1; typePool = ENEMY_TYPES_LANE1; } else if (lane === 2 && isArcaneLaneUnlocked) { canSpawn = now - state.lastSpawnTimeLane2 > state.spawnIntervalLane2; typePool = ENEMY_TYPES_LANE2; } if (!canSpawn || typePool.length === 0) return; const { color, shape } = typePool[randomInt(0, typePool.length - 1)]; const spawnY = -GAME_CONFIG.ENEMY_BASE_SIZE; const seed = random(0, 1000); const speed = state.enemyBaseSpeed + (state.score * state.speedIncreasePerScore); let spawnX, isLeft = false, offset = 0; const targetPoints = getHeroTargetPoints(state.hero); if (lane === 1) { const target = targetPoints.head; offset = (random(0, 1) - 0.5) * 90; spawnX = target.x + offset; } else { const target = targetPoints.leftBody; spawnX = target.x - random(60, 150); isLeft = true; } state.enemies.push({ lane, laneOffset:offset, x: spawnX, y: spawnY, size: GAME_CONFIG.ENEMY_BASE_SIZE, scale: 0.1, color, shape, speed, angle: 0, oscillationOffset: random(0, Math.PI * 2), spawnTime: now, spawnLeftOfHero: isLeft, spawnCurveSeed: seed, }); const cfgInterval = lane === 1 ? 'SPAWN_INTERVAL_LANE1' : 'SPAWN_INTERVAL_LANE2'; const baseInt = getStageDifficulty(currentStage)[cfgInterval]; const newInt = Math.max(lane === 1 ? 700 : 800, baseInt - (state.score * state.spawnDecreasePerScore)); if (lane === 1) { state.lastSpawnTimeLane1 = now; state.spawnIntervalLane1 = newInt; } else { state.lastSpawnTimeLane2 = now; state.spawnIntervalLane2 = newInt; } }
+    function updateEnemies() { const h = canvas.height; for (let i = state.enemies.length - 1; i >= 0; i--) { const e = state.enemies[i]; if (!isEnemyVisible(e)) continue; e.scale = clamp(0.15 + (e.y / h) * 0.85, 0.1, 1.0); EnemyBehavior.updateMovement(e); if (e.y > h + 50 || e.x < -50 || e.x > canvas.width + 50) { state.enemies.splice(i, 1); } } }
+    function trySpawnUnit(unitId) { const now = getTimestamp(); if (!state.playing || !state.gameStarted || isShopMenuActive) return; const uData = UNIT_DATA[unitId]; const btn = document.querySelector(`.unit-button[data-unit="${unitId}"]`); if (!uData || !btn) return; const lane = parseInt(btn.dataset.lane, 10); if (isNaN(lane) || (lane === 2 && !isArcaneLaneUnlocked)) return; if (now < laneCooldowns[lane]) return; const targetPoints = getHeroTargetPoints(state.hero); let uX, uY; if (lane === 1) { const s = targetPoints.head; uX = s.x; uY = s.y - GAME_CONFIG.HERO_SIZE * 0.3 - GAME_CONFIG.UNIT_SIZE * 0.8; } else { const s = targetPoints.leftBody; uX = s.x - GAME_CONFIG.UNIT_SIZE * 0.2; uY = s.y - GAME_CONFIG.HERO_SIZE * 0.1 - GAME_CONFIG.UNIT_SIZE * 0.8; } const enemyTooClose = state.enemies.some(e => e.lane === lane && isEnemyVisible(e) && e.y > uY - GAME_CONFIG.UNIT_SIZE ); if (enemyTooClose) return; const existing = getUnitInLane(lane); if (!existing) { state.units.push({ x: uX, y: uY, size: GAME_CONFIG.UNIT_SIZE, color: uData.color, shape: uData.shape, lane }); createExplosion(uX, uY, uData.color, GAME_CONFIG.PARTICLE_COUNT * 0.5); } else { if (existing.shape === uData.shape) return; createExplosion(existing.x, existing.y, existing.color, GAME_CONFIG.PARTICLE_COUNT * 0.7); createExplosion(uX, uY, uData.color, GAME_CONFIG.PARTICLE_COUNT * 0.5); state.units = state.units.filter(u => u !== existing); state.coins = (state.coins || 0) + 1; spawnSparkles(existing.x, existing.y, COLORS.GOLD, 5); laneCooldowns[lane] = now + GAME_CONFIG.LANE_UNIT_COOLDOWN; } }
+    function spawnSpike() { if(!state || !path.endWidth || !canvas) return; const now = getTimestamp(); if (now - state.lastSpikeSpawnTime < state.spikeSpawnInterval) return; const pathWidthAtTop = path.endWidth; const pathCenterX = canvas.width / 2; const spawnX = random(pathCenterX - pathWidthAtTop / 2, pathCenterX + pathWidthAtTop / 2); const spawnY = -GAME_CONFIG.SPIKE_BASE_SIZE; state.spikes.push({ x: spawnX, y: spawnY, size: GAME_CONFIG.SPIKE_BASE_SIZE, speed: state.spikeSpeed, color: COLORS.SPIKE_COLOR, tipColor: COLORS.SPIKE_TIP_COLOR, angle: 0 }); state.lastSpikeSpawnTime = now; }
+    function updateSpikes() { if(!state || !canvas) return; for (let i = state.spikes.length - 1; i >= 0; i--) { const spike = state.spikes[i]; spike.y += spike.speed; spike.currentSize = spike.size * (0.3 + 0.7 * (spike.y / canvas.height)); if (spike.y > canvas.height + spike.size) { state.spikes.splice(i, 1); } } }
+    function getBounds(x, y, size) { const hs = size / 2; return { left: x - hs, right: x + hs, top: y - hs, bottom: y + hs }; }
+    function checkAABBCollision(boxA, boxB) { return boxA.left < boxB.right && boxA.right > boxB.left && boxA.top < boxB.bottom && boxA.bottom > boxB.top; }
+    function checkCollisions() { if(!state || !state.hero) return; const heroBB = getHeroBoundingBox(state.hero); for (let sIdx = state.spikes.length - 1; sIdx >= 0; sIdx--) { const spike = state.spikes[sIdx]; const spikeBounds = getBounds(spike.x, spike.y, spike.currentSize * 0.8); if (checkAABBCollision(spikeBounds, heroBB)) { createExplosion(spike.x, spike.y, spike.color, GAME_CONFIG.PARTICLE_COUNT * 0.6); if (state.hero.hp > 0) { heroHitFeedback = 24; state.hero.hp -= GAME_CONFIG.SPIKE_DAMAGE; explodingHeartIndex = state.hero.hp; explodingHeartAnim = 18; if (state.hero.hp <= 0) { gameOver(); return; } } state.spikes.splice(sIdx, 1); break;  } } if (!state.playing) return;  for (let eIdx = state.enemies.length - 1; eIdx >= 0; eIdx--) { if (!state.enemies[eIdx]) continue; const enemy = state.enemies[eIdx]; if (!isEnemyVisible(enemy)) continue; const enemySize = enemy.size * enemy.scale; const enemyBounds = getBounds(enemy.x, enemy.y, enemySize); let wasEnemyRemoved = false; if (checkAABBCollision(enemyBounds, heroBB)) { createExplosion(enemy.x, enemy.y, enemy.color); if (state.hero.hp > 0) { heroHitFeedback = 24; state.hero.hp--; explodingHeartIndex = state.hero.hp; explodingHeartAnim = 18; if (state.hero.hp <= 0) { gameOver(); return; } } state.enemies.splice(eIdx, 1); wasEnemyRemoved = true; } if (wasEnemyRemoved) continue; for (let uIdx = state.units.length - 1; uIdx >= 0; uIdx--) { if (!state.units[uIdx]) continue; const unit = state.units[uIdx]; if (!isUnitVisible(unit) || unit.lane !== enemy.lane) continue; const unitBounds = getBounds(unit.x, unit.y, unit.size); if (checkAABBCollision(enemyBounds, unitBounds)) { const eShape = enemy.shape; const uShape = unit.shape; if (eShape === uShape) { createExplosion(enemy.x, enemy.y, enemy.color); createExplosion(unit.x, unit.y, unit.color); state.score++; if (state.score >= scoreNeededForNextStage && !isShopMenuActive) { openShopMenu(); } state.enemies.splice(eIdx, 1); state.units.splice(uIdx, 1); wasEnemyRemoved = true; break; } else { createExplosion(unit.x, unit.y, unit.color); state.units.splice(uIdx, 1); } } } } }
+    function createExplosion(x, y, color, count = GAME_CONFIG.PARTICLE_COUNT, particleConfig = {}) { if(!state) return; for (let i = 0; i < count; i++) { const angle = random(0, Math.PI * 2); const speed = particleConfig.speed || random(1.5, 4); const life = particleConfig.life || random(15, 30); const size = particleConfig.size || random(2, 5); state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, color: particleConfig.color || color, alpha: 0.9, size, shape: particleConfig.shape || null, isSparkle: particleConfig.isSparkle || false }); } }
+    function spawnSparkles(x, y, color, count = 8, config = {}) { createExplosion(x,y,color,count, {isSparkle:true, speed: random(1,3), life:random(12,22), size:random(3,6), ...config}); }
+    function spawnHeartParticles(x,y, count = 10){ createExplosion(x,y, COLORS.HP_FILLED[2], count, {shape: SHAPES.HEART_PARTICLE, speed: random(1,2.5), life: random(25,40), size: random(12,18), color: COLORS.HP_FILLED[1]}); }
+    function updateParticles() { if(!state) return; for (let i = state.particles.length - 1; i >= 0; i--) { const p = state.particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= (p.shape === SHAPES.HEART_PARTICLE ? 0.97 : 0.95); if(p.shape === SHAPES.HEART_PARTICLE) p.vy -=0.05; p.life--; p.alpha = clamp(p.life / (p.shape === SHAPES.HEART_PARTICLE ? 25 : 15), 0, 1); if (p.life <= 0) { state.particles.splice(i, 1); } } }
+    function drawParticles() { if(!ctx) return; ctx.globalCompositeOperation = 'lighter'; for (const p of state.particles) { ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color; ctx.beginPath(); if (p.isSparkle) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.life * 0.1); ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); ctx.restore(); } else if (p.shape) { ctx.save(); ctx.translate(p.x,p.y); drawThematicShape(ctx,p.shape,p.size); ctx.restore(); } else { ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); } } ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+    function refreshShopCurrency() { if(playerCurrencyDisplay && state) playerCurrencyDisplay.textContent = state.coins; }
+    function updateShopUnlockButton() { if(!buyUnlockBtn || !unlockPriceDisplay || !buyUnlockStatus || !state) return; buyUnlockBtn.disabled = isArcaneLaneUnlocked || state.coins < GAME_CONFIG.UNLOCK_COST; unlockPriceDisplay.textContent = GAME_CONFIG.UNLOCK_COST; if (isArcaneLaneUnlocked) { buyUnlockStatus.textContent = "Arcane Lane Unlocked!"; buyUnlockStatus.style.color = COLORS.GREEN; } else if (state.coins < GAME_CONFIG.UNLOCK_COST) { buyUnlockStatus.textContent = "Not enough Gold!"; buyUnlockStatus.style.color = COLORS.RED; } else { buyUnlockStatus.textContent = ""; } }
+    function updateShopHealthUpgradeGUI() { if(!healthUpgradePriceDisplay || !maxHpCapDisplay || !buyHealthUpgradeBtn || !buyHealthUpgradeStatus || !state) return; healthUpgradePriceDisplay.textContent = GAME_CONFIG.HEALTH_UPGRADE_COST; maxHpCapDisplay.textContent = GAME_CONFIG.MAX_HERO_HP_POSSIBLE; const currentTotalMaxHp = GAME_CONFIG.BASE_STARTING_HP + purchasedHpUpgrades; if (currentTotalMaxHp >= GAME_CONFIG.MAX_HERO_HP_POSSIBLE) { buyHealthUpgradeBtn.disabled = true; buyHealthUpgradeStatus.textContent = "Max HP Reached!"; buyHealthUpgradeStatus.style.color = COLORS.GREEN; } else if (state.coins < GAME_CONFIG.HEALTH_UPGRADE_COST) { buyHealthUpgradeBtn.disabled = true; buyHealthUpgradeStatus.textContent = "Not enough Gold!"; buyHealthUpgradeStatus.style.color = COLORS.RED; } else { buyHealthUpgradeBtn.disabled = false; buyHealthUpgradeStatus.textContent = `Current Max HP: ${currentTotalMaxHp + 1}`; buyHealthUpgradeStatus.style.color = COLORS.WHITE; } }
+    function openShopMenu() { isShopMenuActive = true; if(state) state.playing = false; if(shopMenu) shopMenu.style.display = 'flex'; refreshShopCurrency(); updateShopUnlockButton(); updateShopHealthUpgradeGUI(); }
+    function closeShopMenu() { isShopMenuActive = false; if (state && state.gameStarted && state.hero.hp > 0) { state.playing = true; } if(shopMenu) shopMenu.style.display = 'none'; updateHiddenPairVisibility(); }
+    function updateAndDrawTorches() { if(!state || !canvas || !ctx) return; for (let i = state.torches.length - 1; i >= 0; i--) { const torch = state.torches[i]; torch.y += GAME_CONFIG.TORCH_SCROLL_SPEED; const pathEdges = getPathEdgesAtY(torch.y); const baseOffset = 20; const perspectiveOffsetFactor = 1 - (torch.y / canvas.height) * 0.3; const offsetFromPathEdge = baseOffset * perspectiveOffsetFactor + torch.size * 0.3; if (torch.intendedSide === 'left') { torch.x = pathEdges.left - offsetFromPathEdge; } else { torch.x = pathEdges.right + offsetFromPathEdge; } const perspectiveScale = Math.max(0.2, Math.min(1, (torch.y / canvas.height) * 0.8 + 0.2)); const scaledSize = torch.size * perspectiveScale; if (torch.y > canvas.height + scaledSize * 2 || torch.x < -scaledSize * 2 || torch.x > canvas.width + scaledSize * 2) { state.torches.splice(i, 1); } else { drawTorch(torch.x, torch.y, scaledSize, torch.seed); } } if (state.torches.length < GAME_CONFIG.MAX_TORCHES) { spawnTorch(); } }
+    function drawDungeonBackground() { if(!ctx || !canvas) return; const w = canvas.width; const h = canvas.height; const wg = ctx.createLinearGradient(0, 0, 0, h * 0.6); wg.addColorStop(0, COLORS.WALL_COLOR_FAR); wg.addColorStop(1, COLORS.WALL_COLOR_NEAR); ctx.fillStyle = wg; ctx.fillRect(0, 0, w, h * 0.65); const fg = ctx.createLinearGradient(0, h * 0.6, 0, h); fg.addColorStop(0, COLORS.WALL_COLOR_NEAR); fg.addColorStop(1, "#3E2723"); ctx.fillStyle = fg; ctx.fillRect(0, h * 0.65, w, h * 0.35); updateAndDrawTorches(); }
+    function drawTorch(x, y, size, seed = 0) { if(!ctx) return; const fTopY = y - size * 1.5; const fW = size * 0.8; ctx.fillStyle = '#444'; ctx.fillRect(x - size * 0.3, y - size * 0.5, size * 0.6, size); ctx.fillStyle = '#555'; ctx.fillRect(x - size * 0.4, y + size * 0.3, size * 0.8, size * 0.2); const fGrad = ctx.createRadialGradient(x, fTopY, size * 0.1, x, fTopY, size); fGrad.addColorStop(0, COLORS.WHITE + 'ff'); fGrad.addColorStop(0.3, COLORS.YELLOW + 'cc'); fGrad.addColorStop(0.7, COLORS.RED + '99'); fGrad.addColorStop(1, COLORS.RED + '00'); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = fGrad; ctx.beginPath(); ctx.moveTo(x, fTopY + Math.sin(getTimestamp()/100 + seed) * size * 0.1); const flameWobble = Math.sin(getTimestamp() / 150 + seed + x) * fW * 0.2; ctx.bezierCurveTo(x - fW / 2 + flameWobble, y - size * 1.8, x + fW / 2 - flameWobble, y - size * 1.8, x, fTopY + Math.sin(getTimestamp()/120 + seed + 1) * size * 0.1); ctx.closePath(); ctx.fill(); ctx.fillStyle = COLORS.GOLD + '22'; ctx.beginPath(); ctx.arc(x, fTopY, size * 1.8 * (1 + Math.sin(getTimestamp()/180 + seed)*0.1), 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    function drawPath() { if(!ctx || !canvas || !path.startWidth) return; const w = canvas.width; const h = canvas.height; pathAnimOffset = (pathAnimOffset + GAME_CONFIG.TORCH_SCROLL_SPEED); if (pathAnimOffset > 100000) pathAnimOffset = 0; ctx.save(); ctx.beginPath(); const pW1 = path.startWidth; const pW0 = path.endWidth; ctx.moveTo((w - pW1) / 2, h); ctx.lineTo((w - pW0) / 2, 0); ctx.lineTo((w + pW0) / 2, 0); ctx.lineTo((w + pW1) / 2, h); ctx.closePath(); const pGrad = ctx.createLinearGradient(w / 2, h, w / 2, 0); pGrad.addColorStop(0, COLORS.PATH_COLOR_NEAR); pGrad.addColorStop(1, COLORS.PATH_COLOR_FAR); ctx.fillStyle = pGrad; ctx.fill(); ctx.setLineDash([20, 15]); ctx.lineDashOffset = -(pathAnimOffset % 35); ctx.strokeStyle = COLORS.PATH_LINE; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 6; ctx.strokeStyle = COLORS.PATH_BORDER; ctx.beginPath(); ctx.moveTo((w - pW1) / 2, h); ctx.lineTo((w - pW0) / 2, 0); ctx.moveTo((w + pW1) / 2, h); ctx.lineTo((w + pW0) / 2, 0); ctx.stroke(); ctx.restore(); }
+    
+    function drawHero(hero) { 
+        if(!ctx) return; 
+        const { x, y, size: s } = hero; 
+        ctx.save(); 
+        hero.x += (hero.targetX - hero.x) * GAME_CONFIG.HERO_LERP_FACTOR; 
+        const bobY = y + Math.sin(getTimestamp() / 280) * s * 0.035; 
+        
+        ctx.fillStyle = COLORS.BLACK + '33'; 
+        ctx.beginPath(); 
+        ctx.ellipse(hero.x, y + s * 0.48, s * 0.4, s * 0.1, 0, 0, Math.PI * 2); 
+        ctx.fill(); 
+        
+        ctx.translate(hero.x, bobY); 
+        if (heroHitFeedback > 0) { 
+            const flashAlpha = (heroHitFeedback % 8 < 4) ? 0.7 : 0; 
+            if (flashAlpha > 0) { 
+                ctx.save(); 
+                ctx.fillStyle = `rgba(255, 100, 100, ${flashAlpha * 0.7})`; 
+                ctx.beginPath(); ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2); 
+                ctx.fill(); 
+                ctx.restore(); 
+            } 
+        } 
+        const bodyC = '#90A4AE'; const trimC = '#607D8B'; const accentC = '#FFC107'; const darkShadowC = '#37474F'; const plumeC = '#F44336'; 
+        ctx.lineWidth = Math.max(2, s * 0.03); 
+        ctx.fillStyle = trimC; ctx.strokeStyle = darkShadowC; 
+        ctx.beginPath(); ctx.rect(-s*0.18, s*0.3, s*0.12, s*0.1); ctx.fill(); ctx.stroke(); 
+        ctx.beginPath(); ctx.rect( s*0.06, s*0.3, s*0.12, s*0.1); ctx.fill(); ctx.stroke(); 
+        ctx.fillStyle = bodyC; 
+        ctx.beginPath(); ctx.rect(-s*0.2, s*0.1, s*0.15, s*0.25); ctx.fill(); ctx.stroke(); 
+        ctx.beginPath(); ctx.rect( s*0.05, s*0.1, s*0.15, s*0.25); ctx.fill(); ctx.stroke(); 
+        ctx.fillStyle = bodyC; 
+        ctx.beginPath(); ctx.moveTo(-s*0.3, s*0.15); ctx.lineTo(-s*0.35, -s*0.2); ctx.quadraticCurveTo(-s*0.2, -s*0.28, 0, -s*0.3); ctx.quadraticCurveTo( s*0.2, -s*0.28, s*0.35, -s*0.2); ctx.lineTo(s*0.3, s*0.15); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+        ctx.fillStyle = trimC; 
+        ctx.beginPath(); ctx.moveTo(-s*0.33, -s*0.22); ctx.quadraticCurveTo(-s*0.45, -s*0.1, -s*0.3, s*0.05); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(s*0.33, -s*0.22); ctx.quadraticCurveTo(s*0.45, -s*0.1, s*0.3, s*0.05); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+        ctx.strokeStyle = accentC; ctx.lineWidth = s * 0.02; 
+        ctx.beginPath(); ctx.moveTo(-s*0.32, -s*0.2); ctx.quadraticCurveTo(-s*0.42, -s*0.08, -s*0.29, s*0.03); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(s*0.32, -s*0.2); ctx.quadraticCurveTo(s*0.42, -s*0.08, s*0.29, s*0.03); ctx.stroke(); 
+        ctx.lineWidth = Math.max(2, s * 0.03); 
+        ctx.fillStyle = bodyC; ctx.strokeStyle = darkShadowC; 
+        ctx.beginPath(); ctx.arc(0, -s*0.25, s*0.2, Math.PI * 1.1, Math.PI * 1.9, true); ctx.lineTo(-s*0.15, -s*0.05); ctx.lineTo( s*0.15, -s*0.05); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+        ctx.fillStyle = darkShadowC; 
+        ctx.fillRect(-s*0.03, -s*0.3, s*0.06, s*0.15); 
+        ctx.fillRect(-s*0.15, -s*0.22, s*0.3, s*0.05); 
+        ctx.fillStyle = accentC; 
+        ctx.beginPath(); ctx.arc(0, -s*0.42, s*0.05, 0, Math.PI * 2); ctx.fill(); 
+        ctx.fillStyle = plumeC; ctx.strokeStyle = '#A03020'; 
+        ctx.beginPath(); ctx.moveTo(0, -s*0.45); ctx.bezierCurveTo(s*0.1, -s*0.65, s*0.15, -s*0.55, s*0.08, -s*0.35); ctx.bezierCurveTo(s*0.03, -s*0.45, -s*0.03, -s*0.45, -s*0.08, -s*0.35); ctx.bezierCurveTo(-s*0.15, -s*0.55, -s*0.1, -s*0.65, 0, -s*0.45); ctx.closePath(); ctx.fill(); ctx.stroke(); 
+        ctx.fillStyle = trimC; 
+        ctx.fillRect(-s*0.25, s*0.08, s*0.5, s*0.06); 
+        ctx.fillStyle = accentC; 
+        ctx.fillRect(-s*0.06, s*0.07, s*0.12, s*0.08); 
+        ctx.restore(); 
+    }
+
+    function drawEnemy(enemy) { if (!isEnemyVisible(enemy) || !ctx) return; const sz = enemy.size * enemy.scale; ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(enemy.angle); ctx.fillStyle = enemy.color; drawThematicShape(ctx, enemy.shape, sz); ctx.restore(); }
+    function drawUnit(unit) { if (!isUnitVisible(unit) || !ctx) return; ctx.save(); ctx.translate(unit.x, unit.y); const pulse = 1 + Math.sin(getTimestamp() / 200 + unit.lane * 10) * 0.05; ctx.scale(pulse, pulse); ctx.fillStyle = unit.color; ctx.strokeStyle = COLORS.UNIT_STROKE + 'aa'; ctx.shadowColor = unit.color; ctx.shadowBlur = 8 * pulse; drawThematicShape(ctx, unit.shape, unit.size); ctx.restore(); }
+    
+    function drawSpike(spike) { 
+        if(!ctx) return; 
+        ctx.save(); 
+        ctx.translate(spike.x, spike.y); 
+        ctx.rotate(spike.angle); 
+        const s = spike.currentSize; 
+        const pulse = 1 + Math.sin(getTimestamp() / 150 + spike.x + spike.y) * 0.05;
+        ctx.strokeStyle = COLORS.SPIKE_OUTLINE_PULSE;
+        ctx.lineWidth = Math.max(1, s * 0.05) * pulse; 
+        ctx.shadowColor = COLORS.SPIKE_OUTLINE_PULSE + '99';
+        ctx.shadowBlur = 8 * pulse;
+        ctx.fillStyle = spike.color; 
+        ctx.beginPath(); 
+        ctx.moveTo(0, -s * 0.6); ctx.lineTo(-s * 0.35, s * 0.4); ctx.quadraticCurveTo(0, s*0.6, s * 0.35, s * 0.4); ctx.closePath(); 
+        ctx.fill(); 
+        if (ctx.lineWidth > 0) ctx.stroke();
+        ctx.shadowColor = 'transparent'; 
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = spike.tipColor; 
+        ctx.beginPath(); ctx.moveTo(0, -s * 0.6); ctx.lineTo(-s * 0.1, -s * 0.35); ctx.lineTo( s * 0.1, -s * 0.35); ctx.closePath(); ctx.fill(); 
+        ctx.restore(); 
+    } 
+    
+    function drawHpIcon(x, y, size, filled, isExploding, animProgress) { if(!ctx) return; ctx.save(); ctx.translate(x, y); ctx.scale(size / 22, size / 22); if (isExploding) { const alpha = Math.max(0, 1 - animProgress / 18); const scale = 1 + animProgress / 7; ctx.globalAlpha = alpha; ctx.scale(scale, scale); ctx.rotate(animProgress * 0.2); } ctx.fillStyle = '#00000033'; ctx.beginPath(); ctx.moveTo(11, 19); ctx.bezierCurveTo(1, 10, 6, 2, 11, 7); ctx.bezierCurveTo(16, 2, 21, 10, 11, 19); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(11, 19); ctx.bezierCurveTo(1, 10, 6, 2, 11, 7); ctx.bezierCurveTo(16, 2, 21, 10, 11, 19); ctx.closePath(); const gradColors = filled ? COLORS.HP_FILLED : COLORS.HP_EMPTY; const grad = ctx.createLinearGradient(0, 2, 0, 20); grad.addColorStop(0, gradColors[0]); grad.addColorStop(0.5, gradColors[1]); grad.addColorStop(1, gradColors[2]); ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = filled ? '#FFFFFFcc' : '#AAAAAAaa'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
+    function drawUI() { if(!ctx || !state || !state.hero || !canvas) return; ctx.save(); const hpISize = 28; const hpSX = 20; const hpSY = 20; for (let i = 0; i < state.hero.maxHp; i++) { const isF = i < state.hero.hp; const isE = i === explodingHeartIndex && explodingHeartAnim > 0; drawHpIcon(hpSX + i * (hpISize + 6), hpSY, hpISize, isF, isE, explodingHeartAnim); } ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.font = "bold 20px 'Segoe UI', Arial, sans-serif"; ctx.fillStyle = COLORS.GOLD; ctx.shadowColor = COLORS.BLACK + "aa"; ctx.shadowBlur = 3; ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1; ctx.fillText(`Stage: ${currentStage}`, hpSX, hpSY + hpISize + 10); ctx.fillStyle = COLORS.WHITE; ctx.fillText(`Score: ${state.score} / ${scoreNeededForNextStage}`, hpSX, hpSY + hpISize + 35); if (state.coins > 0) { const cX = canvas.width - 30; const cY = 35; const cR = 16; ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(cX, cY, cR, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#B8860B"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#8B4513"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("G", cX, cY + 1); ctx.font = "bold 24px 'Segoe UI', Arial, sans-serif"; ctx.fillStyle = COLORS.WHITE; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(state.coins.toString(), cX - cR - 8, cY + 1); } ctx.restore(); if (heroHitFeedback > 0) heroHitFeedback--; if (explodingHeartAnim > 0) { explodingHeartAnim--; if (explodingHeartAnim === 0) explodingHeartIndex = -1; } }
+    function updateUICooldowns() { if(!unitButtons) return; const now = getTimestamp(); unitButtons.forEach(btn => { const lane = parseInt(btn.dataset.lane, 10); if (!lane) return; const cooldownEnd = laneCooldowns[lane]; const remaining = Math.max(0, cooldownEnd - now); const ov = btn.querySelector('.cooldown-overlay'); if (remaining > 0) { btn.classList.add('cooldown'); if (ov) { const pct = remaining / GAME_CONFIG.LANE_UNIT_COOLDOWN; ov.style.transform = `scaleY(${clamp(pct, 0, 1)})`; } } else { btn.classList.remove('cooldown'); if (ov) { ov.style.transform = 'scaleY(0)'; } } }); }
+    function drawGame() { if(!ctx || !canvas || !state) return; ctx.clearRect(0, 0, canvas.width, canvas.height); drawDungeonBackground(); drawPath(); state.spikes.forEach(drawSpike); state.enemies.forEach(drawEnemy); state.units.forEach(drawUnit); drawHero(state.hero); drawParticles(); if (SETTINGS.DEBUG_MODE) { drawDebugHeroElements(); } }
+    function drawDebugHeroElements() { if (!state || !state.hero || !ctx) return; const heroBB = getHeroBoundingBox(state.hero); const targets = getHeroTargetPoints(state.hero); ctx.save(); ctx.globalAlpha = 0.3; ctx.strokeStyle = '#0FF'; ctx.lineWidth = 2; ctx.strokeRect(heroBB.left, heroBB.top, heroBB.right - heroBB.left, heroBB.bottom - heroBB.top); ctx.globalAlpha = 0.7; ctx.font = '10px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; Object.entries(targets).forEach(([key, t]) => { ctx.fillStyle = t.alt ? '#FF00FF' : (t.lane === 2 ? '#00FF00' : '#FFFF00'); ctx.beginPath(); ctx.arc(t.x, t.y, 5, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#FFF'; ctx.fillText(key, t.x, t.y - 8);}); ctx.restore(); }
+    function createStartMenuParticles() { if (!startMenuContent) return; const rect = startMenuContent.getBoundingClientRect(); startMenuParticles = []; for (let i = 0; i < GAME_CONFIG.START_MENU_PARTICLE_COUNT; i++) { startMenuParticles.push({ x: random(rect.left, rect.right), y: random(rect.top, rect.bottom), vx: random(-0.3, 0.3), vy: random(-0.3, 0.3), size: random(2, 4), alpha: random(0.1, 0.5), color: `rgba(255, 183, 77, ${random(0.2, 0.6)})` }); } }
+    function updateAndDrawStartMenuParticles(menuVisible) { if (!menuVisible || !startMenuParticles.length || !startMenuContent || !ctx) return; const rect = startMenuContent.getBoundingClientRect();  ctx.save(); ctx.beginPath(); ctx.rect(rect.left, rect.top, rect.width, rect.height); ctx.clip(); for (let i = startMenuParticles.length - 1; i >= 0; i--) { const p = startMenuParticles[i]; p.x += p.vx; p.y += p.vy; p.alpha += random(-0.01, 0.01); p.alpha = clamp(p.alpha, 0.1, 0.6); if (p.x < rect.left || p.x > rect.right || p.y < rect.top || p.y > rect.bottom) { p.x = random(rect.left, rect.right); p.y = random(rect.top, rect.bottom); p.vx = random(-0.3, 0.3); p.vy = random(-0.3, 0.3); } ctx.fillStyle = p.color.replace(/[\d\.]+\)$/g, `${p.alpha})`);  ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); }
+    function gameLoop(timestamp) { try { if (!state) { return; } const startMenuVisible = startMenu.style.display !== 'none'; if (state.playing && state.gameStarted && !isShopMenuActive) { spawnEnemy(1); spawnEnemy(2); spawnSpike(); updateEnemies(); updateSpikes(); checkCollisions(); updateParticles(); } updateUICooldowns(); updateHiddenPairVisibility(); drawGame(); drawUI(); updateAndDrawStartMenuParticles(startMenuVisible); state.animationFrameId = requestAnimationFrame(gameLoop); } catch (e) { console.error("Error in gameLoop:", e); if (state && state.animationFrameId) { cancelAnimationFrame(state.animationFrameId); } window.onerror(`GAMELOOP CRASH: ${e.message}`, 'gameLoop', 0, 0, e); } }
+    
+    function setupEventListeners() {
+        if (!startButton || !restartButton || !buyUnlockBtn || !buyHealthUpgradeBtn || !continueBtn || !shopCloseBtn || !unitButtons || !canvas) {
+            console.error("One or more essential elements for event listeners are not found. Aborting listener setup.");
+            return; 
+        }
+
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', resetGame);
+
+        buyUnlockBtn.onclick = () => { if (!state || isArcaneLaneUnlocked || state.coins < GAME_CONFIG.UNLOCK_COST) return; state.coins -= GAME_CONFIG.UNLOCK_COST; isArcaneLaneUnlocked = true; buyUnlockStatus.textContent = "Purchased!"; buyUnlockStatus.style.color = COLORS.GREEN; buyUnlockBtn.disabled = true; refreshShopCurrency(); updateHiddenPairVisibility(); updateShopHealthUpgradeGUI(); };
+        buyHealthUpgradeBtn.onclick = () => { if(!state || !state.hero) return; const currentTotalMaxHp = GAME_CONFIG.BASE_STARTING_HP + purchasedHpUpgrades; if (currentTotalMaxHp >= GAME_CONFIG.MAX_HERO_HP_POSSIBLE) return; if (state.coins < GAME_CONFIG.HEALTH_UPGRADE_COST) return; state.coins -= GAME_CONFIG.HEALTH_UPGRADE_COST; purchasedHpUpgrades++; state.hero.maxHp = GAME_CONFIG.BASE_STARTING_HP + purchasedHpUpgrades; state.hero.hp = state.hero.maxHp; spawnHeartParticles(state.hero.x, state.hero.y - state.hero.size * 0.2); refreshShopCurrency(); updateShopHealthUpgradeGUI(); updateShopUnlockButton(); };
+        continueBtn.onclick = () => { if(!state) return; currentStage++; scoreNeededForNextStage = Math.floor(scoreNeededForNextStage * GAME_CONFIG.STAGE_TARGET_MULTIPLIER + GAME_CONFIG.STAGE_TARGET_INCREMENT); applyStageDifficulty(); closeShopMenu(); state.enemies = []; state.units = []; state.particles = []; state.spikes = []; const now = getTimestamp(); state.lastSpawnTimeLane1 = now; state.lastSpawnTimeLane2 = now; state.lastSpikeSpawnTime = now; state.score = 0; };
+        shopCloseBtn.onclick = closeShopMenu; 
+
+        window.addEventListener('resize', () => { 
+            resizeCanvas(); 
+            if (state && state.hero) { 
+                state.hero.x = canvas.width / 2; 
+                state.hero.targetX = canvas.width / 2; 
+                state.hero.y = canvas.height - 150; 
+            } 
+            path.updateDimensions(); 
+            if(state && state.torches) { initializeTorches();} 
+            if(startMenu && startMenu.style.display !== 'none') createStartMenuParticles(); 
+        }); 
+        
+        unitButtons.forEach(btn => { 
+            const uid = btn.dataset.unit; 
+            if (!uid) return; 
+            let lastTouchEventTime = 0;
+            btn.addEventListener('touchend', (e) => { 
+                e.preventDefault(); 
+                trySpawnUnit(uid); 
+                lastTouchEventTime = getTimestamp(); 
+            }, { passive: false }); 
+            btn.addEventListener('mouseup', (e) => { 
+                if (getTimestamp() - lastTouchEventTime < 150) return; 
+                trySpawnUnit(uid); 
+            }); 
+        }); 
+        
+        let isDown = false; 
+        let lastPointerEventTime = 0; 
+        const getPointerX = (e) => e.touches ? e.touches[0].clientX : e.clientX; 
+        
+        const onPointerDown = (e) => { 
+            if (!state || !state.playing || isShopMenuActive || e.target !== canvas) return; 
+            isDown = true; 
+            state.hero.targetX = clampHeroX(getPointerX(e)); 
+            if(canvas) canvas.style.cursor = 'grabbing'; 
+            if (e.touches) lastPointerEventTime = getTimestamp(); 
+            e.preventDefault(); 
+        }; 
+        const onPointerMove = (e) => { 
+            if (!isDown || !state || !state.playing || isShopMenuActive) return; 
+            state.hero.targetX = clampHeroX(getPointerX(e)); 
+            if (e.touches) lastPointerEventTime = getTimestamp(); 
+            e.preventDefault(); 
+        }; 
+        const onPointerUp = (e) => { 
+            if (!isDown) return; 
+            isDown = false; 
+            if(canvas) canvas.style.cursor = 'grab'; 
+            if (e.touches) lastPointerEventTime = getTimestamp(); 
+        }; 
+        
+        if(canvas) {
+            canvas.addEventListener('mousedown', onPointerDown); 
+            canvas.addEventListener('touchstart', onPointerDown, { passive: false }); 
+            canvas.addEventListener('mousemove', onPointerMove); 
+            canvas.addEventListener('touchmove', onPointerMove, { passive: false }); 
+            canvas.addEventListener('mouseup', onPointerUp); 
+            canvas.addEventListener('touchend', onPointerUp, { passive: false }); 
+            canvas.addEventListener('mouseleave', onPointerUp); 
+            canvas.addEventListener('touchcancel', onPointerUp, { passive: false }); 
+            canvas.style.cursor = 'grab'; 
+        }
+    }
+
+    function clampHeroX(clientX) { if(!state || !state.hero || !canvas || !path.startWidth) return clientX; const w = canvas.width; const hSize = state.hero.size; const yRatio = (canvas.height - state.hero.y) / canvas.height; const pathW = path.startWidth - (path.startWidth - path.endWidth) * yRatio; const edgeL = (w - pathW) / 2; const edgeR = w - edgeL; const minX = edgeL + hSize * 0.3; const maxX = edgeR - hSize * 0.3; return clamp(clientX, minX, maxX); }
+    function resizeCanvas() { if(!canvas) return; canvas.width = window.innerWidth; canvas.height = window.innerHeight; path.updateDimensions(); }
+    function updateHiddenPairVisibility() { if(!gameControlsHiddenPair || !state) return; const show = isArcaneLaneUnlocked && state.gameStarted; const isVisible = gameControlsHiddenPair.classList.contains('unlocked'); if (show && !isVisible) { gameControlsHiddenPair.style.display = 'flex'; setTimeout(() => gameControlsHiddenPair.classList.add('unlocked'), 10); } else if (!show && isVisible) { gameControlsHiddenPair.classList.remove('unlocked'); setTimeout(() => { if (!gameControlsHiddenPair.classList.contains('unlocked')) gameControlsHiddenPair.style.display = 'none'; }, 300); } else if (!show && !isVisible) { gameControlsHiddenPair.style.display = 'none'; } }
+    function showStartArrows() { if(!pathFlashArrows || !arrowIndicator) return; const svg = `<svg width="100%" height="100%" style="position:absolute;left:0;top:0;z-index:1;"><defs><linearGradient id="pathFlashGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="${COLORS.GOLD}" stop-opacity="0.5"/><stop offset="70%" stop-color="${COLORS.GOLD}" stop-opacity="0.15"/><stop offset="100%" stop-color="${COLORS.GOLD}" stop-opacity="0"/></linearGradient><filter id="flashBlur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="8" /></filter></defs><rect x="0" y="0" width="100%" height="100%" fill="url(#pathFlashGrad)" filter="url(#flashBlur)"/></svg>`; pathFlashArrows.innerHTML = svg; pathFlashArrows.classList.add('visible'); arrowIndicator.classList.add('visible'); setTimeout(() => { arrowIndicator.classList.remove('visible'); pathFlashArrows.classList.remove('visible'); pathFlashArrows.innerHTML = ""; }, 900); }
+    
+    function initializeAppVariables() {
+        canvas = document.getElementById("gameCanvas");
+        if (!canvas) { throw new Error("FATAL: Could not find canvas element with ID 'gameCanvas'"); }
+        ctx = canvas.getContext("2d");
+        if (!ctx) { throw new Error("FATAL: Could not get 2D rendering context from canvas"); }
+
+        startMenu = document.getElementById("startMenu");
+        startMenuContent = document.getElementById("startMenuContent");
+        gameOverMenu = document.getElementById("gameOverMenu");
+        shopMenu = document.getElementById("shopMenu");
+        shopCloseBtn = document.getElementById("shopCloseBtn");
+        playerCurrencyDisplay = document.getElementById("player-currency");
+        buyUnlockBtn = document.getElementById("buyUnlockBtn");
+        buyUnlockStatus = document.getElementById("buyUnlockStatus");
+        unlockPriceDisplay = document.getElementById("unlock-price");
+        continueBtn = document.getElementById("continueBtn");
+        startButton = document.querySelector('.start-button');
+        restartButton = document.querySelector('.restart-button');
+        gameControlsPair = document.getElementById("gameControlsPair");
+        gameControlsHiddenPair = document.getElementById("gameControlsHiddenPair");
+        arrowIndicator = document.getElementById("arrowIndicator");
+        pathFlashArrows = document.getElementById("pathFlashArrows");
+        unitButtons = document.querySelectorAll('.unit-button');
+        buyHealthUpgradeBtn = document.getElementById("buyHealthUpgradeBtn");
+        healthUpgradePriceDisplay = document.getElementById("health-upgrade-price");
+        buyHealthUpgradeStatus = document.getElementById("buyHealthUpgradeStatus");
+        maxHpCapDisplay = document.getElementById("max-hp-cap-display");
+
+        const essentialElements = { canvas, ctx, startMenu, startButton, gameOverMenu, restartButton, shopMenu, gameControlsPair, shopCloseBtn, buyUnlockBtn, buyHealthUpgradeBtn, continueBtn };
+        for (const key in essentialElements) {
+            if (!essentialElements[key]) {
+                throw new Error(`Essential DOM element for '${key}' not found during initialization.`);
+            }
+        }
+    }
+
+    function safeInitializeGame() {
+        try {
+            initializeAppVariables(); 
+            setupEventListeners();
+            setupUnitButtons();
+            resetGame();
+        } catch (e) {
+            console.error("Error during initializeGame:", e);
+            window.onerror(`INIT CRASH: ${e.message}`, 'safeInitializeGame', e.lineNumber || 0, e.columnNumber|| 0, e);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInitializeGame);
+    } else {
+        safeInitializeGame();
+    }
+  </script>
+</body>
+</html>
